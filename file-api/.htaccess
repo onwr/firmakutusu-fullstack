@@ -1,0 +1,55 @@
+# PHP hata gösterimini kapat
+php_flag display_errors off
+
+# Dizin listelemeyi kapat
+Options -Indexes
+
+# PHP dosyalarının içeriğini gösterme
+<Files *.php>
+    Order Deny,Allow
+    Allow from all
+</Files>
+
+# Dosya yükleme limitleri
+php_value upload_max_filesize 10M
+php_value post_max_size 10M
+
+# Rewrite kuralları
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # SSL yönlendirmesi
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    
+    # www olmadan yönlendirme
+    RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
+    RewriteRule ^(.*)$ https://%1/$1 [R=301,L]
+    
+    # uploads klasörüne doğrudan erişimi engelle
+    RewriteRule ^uploads/.*$ - [F,L]
+    
+    # Dosya görüntüleme için
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^files/(.*)$ files.php?file=$1 [L,QSA]
+</IfModule>
+
+# Güvenlik başlıkları
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Access-Control-Allow-Origin "*"
+    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+</IfModule>
+
+# MIME tipleri
+<IfModule mod_mime.c>
+    AddType image/jpeg .jpg .jpeg
+    AddType image/png .png
+    AddType image/gif .gif
+    AddType application/pdf .pdf
+    AddType application/msword .doc
+    AddType application/vnd.openxmlformats-officedocument.wordprocessingml.document .docx
+</IfModule> 
