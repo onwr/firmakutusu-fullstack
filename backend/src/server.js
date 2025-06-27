@@ -1,6 +1,7 @@
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
+const fileUpload = require("express-fileupload");
 const dbPool = require("./config/db");
 const redisClient = require("./config/redis");
 const cors = require("cors");
@@ -26,15 +27,24 @@ const bildirimRoutes = require("./routes/firma/bildirimRoutes");
 const favoriRoutes = require("./routes/favorilerRoutes");
 const faturaRoutes = require("./routes/faturaRoutes");
 const savedCardRoutes = require("./routes/savedCardRoutes");
+const bildirimTercihleriRoutes = require("./routes/bildirimTercihleri");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(express.static(path.join(__dirname, "public")));
-
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(
+  fileUpload({
+    createParentPath: true,
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+  })
+);
+app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://178.157.14.15"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -67,6 +77,7 @@ app.use("/api/bildirim", bildirimRoutes);
 app.use("/api/favoriler", favoriRoutes);
 app.use("/api/fatura", faturaRoutes);
 app.use("/api/saved-cards", savedCardRoutes);
+app.use("/api/bildirim-tercihleri", bildirimTercihleriRoutes);
 
 app.listen(PORT, () => {
   console.log(`Sunucu ${PORT} portunda çalışıyor.`);

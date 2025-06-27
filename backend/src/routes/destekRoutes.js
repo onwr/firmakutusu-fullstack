@@ -3,6 +3,9 @@ const router = express.Router();
 const destekController = require("../controllers/destekController");
 const authMiddleware = require("../middleware/authMiddleware");
 
+// Public destek formu gönderimi (kimlik doğrulama gerektirmez)
+router.post("/public", destekController.submitPublicForm);
+
 // Tüm destek rotaları için kimlik doğrulama gerekli
 router.use(authMiddleware);
 
@@ -20,5 +23,8 @@ router.post("/:ticketId/messages", destekController.addMessage);
 
 // Destek talebi durumunu güncelle
 router.patch("/:ticketId/status", destekController.updateTicketStatus);
+
+// Destek talebine resim ekle
+router.post("/:ticketId/image", destekController.addImageMessage);
 
 module.exports = router;

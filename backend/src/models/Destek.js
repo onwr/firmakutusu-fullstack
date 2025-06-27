@@ -1,6 +1,21 @@
 const dbPool = require("../config/db");
 
 class Destek {
+  static async createPublicTicket(
+    ticketNumber,
+    basvuruTuru,
+    adSoyad,
+    email,
+    telefon,
+    mesaj
+  ) {
+    const [result] = await dbPool.query(
+      "INSERT INTO destek_talepleri (ticket_number, user_id, subject, contact_name, contact_email, contact_phone, contact_message) VALUES (?, NULL, ?, ?, ?, ?, ?)",
+      [ticketNumber, basvuruTuru, adSoyad, email, telefon, mesaj]
+    );
+    return result;
+  }
+
   static async createTicket(userId, subject) {
     const ticketNumber = Math.floor(100000 + Math.random() * 900000).toString();
     const [result] = await dbPool.query(
@@ -10,10 +25,10 @@ class Destek {
     return { id: result.insertId, ticketNumber };
   }
 
-  static async addMessage(ticketId, content, isAdmin = false) {
+  static async addMessage(ticketId, content, isAdmin = false, imageUrl = null) {
     const [result] = await dbPool.query(
-      "INSERT INTO destek_mesajlari (destek_talebi_id, content, is_admin) VALUES (?, ?, ?)",
-      [ticketId, content, isAdmin]
+      "INSERT INTO destek_mesajlari (destek_talebi_id, content, is_admin, image_url) VALUES (?, ?, ?, ?)",
+      [ticketId, content, isAdmin, imageUrl]
     );
     return result.insertId;
   }
@@ -23,9 +38,19 @@ class Destek {
       `SELECT dt.*, 
                 (SELECT COUNT(*) FROM destek_mesajlari dm WHERE dm.destek_talebi_id = dt.id) as message_count
              FROM destek_talepleri dt
-             WHERE dt.user_id = ?
+             WHERE dt.user_id = ? OR dt.user_id IS NULL
              ORDER BY dt.created_at DESC`,
       [userId]
+    );
+    return tickets;
+  }
+
+  static async getAllTickets() {
+    const [tickets] = await dbPool.query(
+      `SELECT dt.*, 
+                (SELECT COUNT(*) FROM destek_mesajlari dm WHERE dm.destek_talebi_id = dt.id) as message_count
+             FROM destek_talepleri dt
+             ORDER BY dt.created_at DESC`
     );
     return tickets;
   }
@@ -46,6 +71,14 @@ class Destek {
     return {
       ...ticket[0],
       messages,
+      contactInfo: ticket[0].contact_name
+        ? {
+            name: ticket[0].contact_name,
+            email: ticket[0].contact_email,
+            phone: ticket[0].contact_phone,
+            message: ticket[0].contact_message,
+          }
+        : null,
     };
   }
 

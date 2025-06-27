@@ -1,16 +1,20 @@
 const pool = require("../../config/db");
-const Subeler = require("./Subeler");
 
 class CalismaSaatleri {
   static async getCalismaSaatleri(subeId) {
     try {
-      const sube = await Subeler.getSubeById(subeId);
-      if (!sube) {
+      // Şube varlığını kontrol et
+      const [subeCheck] = await pool.query(
+        "SELECT id FROM subeler WHERE id = ?",
+        [subeId]
+      );
+
+      if (subeCheck.length === 0) {
         throw new Error("Geçersiz şube ID");
       }
 
       const [rows] = await pool.query(
-        "SELECT * FROM calisma_saatleri WHERE sube_id = ?",
+        "SELECT * FROM calisma_saatleri WHERE sube_id = ? ORDER BY FIELD(gun, 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar')",
         [subeId]
       );
       return rows;
@@ -22,8 +26,13 @@ class CalismaSaatleri {
 
   static async createCalismaSaatleri(subeId, saatlerData) {
     try {
-      const sube = await Subeler.getSubeById(subeId);
-      if (!sube) {
+      // Şube varlığını kontrol et
+      const [subeCheck] = await pool.query(
+        "SELECT id FROM subeler WHERE id = ?",
+        [subeId]
+      );
+
+      if (subeCheck.length === 0) {
         throw new Error("Geçersiz şube ID");
       }
 
@@ -70,6 +79,19 @@ class CalismaSaatleri {
       return result.affectedRows > 0;
     } catch (error) {
       console.error("Çalışma saatleri silinemedi", error);
+      throw error;
+    }
+  }
+
+  static async deleteCalismaSaatleriBySubeId(subeId) {
+    try {
+      const [result] = await pool.query(
+        "DELETE FROM calisma_saatleri WHERE sube_id = ?",
+        [subeId]
+      );
+      return result.affectedRows > 0;
+    } catch (error) {
+      console.error("Şube çalışma saatleri silinemedi", error);
       throw error;
     }
   }

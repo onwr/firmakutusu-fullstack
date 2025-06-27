@@ -89,13 +89,13 @@ class SMSService {
     }
   }
 
-  static async saveVerificationCode(userId, code) {
+  static async saveVerificationCode(userId, code, type = "reset") {
     try {
-      const key = `sms_verify_${userId}`;
+      const key = `sms_verify_${userId}_${type}`;
       await redisClient.set(key, code, {
         EX: 180, // 3 dakika
       });
-      console.log(`Doğrulama kodu kaydedildi: ${userId}`);
+      console.log(`Doğrulama kodu kaydedildi: ${userId} (${type})`);
       return true;
     } catch (error) {
       console.error("SMS doğrulama kodu kayıt hatası:", error);
@@ -103,12 +103,12 @@ class SMSService {
     }
   }
 
-  static async verifyCode(userId, code) {
+  static async verifyCode(userId, code, type = "reset") {
     try {
-      const key = `sms_verify_${userId}`;
+      const key = `sms_verify_${userId}_${type}`;
       const savedCode = await redisClient.get(key);
       console.log(
-        `Doğrulama kodu kontrolü: ${userId}, Beklenen: ${savedCode}, Girilen: ${code}`
+        `Doğrulama kodu kontrolü: ${userId} (${type}), Beklenen: ${savedCode}, Girilen: ${code}`
       );
       return savedCode === code;
     } catch (error) {
@@ -117,11 +117,11 @@ class SMSService {
     }
   }
 
-  static async deleteVerificationCode(userId) {
+  static async deleteVerificationCode(userId, type = "reset") {
     try {
-      const key = `sms_verify_${userId}`;
+      const key = `sms_verify_${userId}_${type}`;
       await redisClient.del(key);
-      console.log(`Doğrulama kodu silindi: ${userId}`);
+      console.log(`Doğrulama kodu silindi: ${userId} (${type})`);
       return true;
     } catch (error) {
       console.error("Doğrulama kodu silme hatası:", error);

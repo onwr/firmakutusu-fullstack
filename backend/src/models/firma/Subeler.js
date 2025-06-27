@@ -13,7 +13,22 @@ class Subeler {
         "SELECT * FROM subeler WHERE firma_id = ?",
         [firmaId]
       );
-      return rows;
+
+      // Her şube için çalışma saatlerini getir
+      const subelerWithSaatler = await Promise.all(
+        rows.map(async (sube) => {
+          const [saatler] = await pool.query(
+            "SELECT * FROM calisma_saatleri WHERE sube_id = ? ORDER BY FIELD(gun, 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar')",
+            [sube.id]
+          );
+          return {
+            ...sube,
+            calisma_saatleri: saatler,
+          };
+        })
+      );
+
+      return subelerWithSaatler;
     } catch (error) {
       console.error("Şubeler alınamadı", error);
       throw error;
@@ -25,7 +40,21 @@ class Subeler {
       const [rows] = await pool.query("SELECT * FROM subeler WHERE id = ?", [
         id,
       ]);
-      return rows[0] || null;
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      const sube = rows[0];
+      const [saatler] = await pool.query(
+        "SELECT * FROM calisma_saatleri WHERE sube_id = ? ORDER BY FIELD(gun, 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar')",
+        [id]
+      );
+
+      return {
+        ...sube,
+        calisma_saatleri: saatler,
+      };
     } catch (error) {
       console.error("Şube bilgileri alınamadı", error);
       throw error;
@@ -45,6 +74,7 @@ class Subeler {
         sube_adresi,
         mail_adresi,
         telefon_numarasi,
+        calisma_saatleri,
       } = subeData;
 
       const [result] = await pool.query(
@@ -61,7 +91,22 @@ class Subeler {
         ]
       );
 
-      return result.insertId;
+      const subeId = result.insertId;
+
+      // Çalışma saatlerini ekle
+      if (calisma_saatleri && Array.isArray(calisma_saatleri)) {
+        for (const saat of calisma_saatleri) {
+          const { gun, acilis_saati, kapanis_saati, kapali } = saat;
+          await pool.query(
+            `INSERT INTO calisma_saatleri 
+            (sube_id, gun, acilis_saati, kapanis_saati, kapali) 
+            VALUES (?, ?, ?, ?, ?)`,
+            [subeId, gun, acilis_saati, kapanis_saati, kapali]
+          );
+        }
+      }
+
+      return subeId;
     } catch (error) {
       console.error("Şube oluşturulamadı", error);
       throw error;
@@ -76,6 +121,7 @@ class Subeler {
         sube_adresi,
         mail_adresi,
         telefon_numarasi,
+        calisma_saatleri,
       } = subeData;
 
       const [result] = await pool.query(
@@ -93,6 +139,25 @@ class Subeler {
         ]
       );
 
+      // Çalışma saatlerini güncelle
+      if (calisma_saatleri && Array.isArray(calisma_saatleri)) {
+        // Önce mevcut çalışma saatlerini sil
+        await pool.query("DELETE FROM calisma_saatleri WHERE sube_id = ?", [
+          id,
+        ]);
+
+        // Yeni çalışma saatlerini ekle
+        for (const saat of calisma_saatleri) {
+          const { gun, acilis_saati, kapanis_saati, kapali } = saat;
+          await pool.query(
+            `INSERT INTO calisma_saatleri 
+            (sube_id, gun, acilis_saati, kapanis_saati, kapali) 
+            VALUES (?, ?, ?, ?, ?)`,
+            [id, gun, acilis_saati, kapanis_saati, kapali]
+          );
+        }
+      }
+
       return result.affectedRows > 0;
     } catch (error) {
       console.error("Şube güncellenemedi", error);
@@ -102,6 +167,10 @@ class Subeler {
 
   static async deleteSube(id) {
     try {
+      // Önce çalışma saatlerini sil
+      await pool.query("DELETE FROM calisma_saatleri WHERE sube_id = ?", [id]);
+
+      // Sonra şubeyi sil
       const [result] = await pool.query("DELETE FROM subeler WHERE id = ?", [
         id,
       ]);

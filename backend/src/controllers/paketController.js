@@ -4,6 +4,7 @@ const config = require("../config/config");
 const FaturaModel = require("../models/Fatura");
 const SMSService = require("../middleware/smsService");
 const YetkiliKisi = require("../models/YetkiliKisi");
+const crypto = require("crypto");
 
 class PaketController {
   // Tüm paketleri getir
@@ -103,9 +104,10 @@ class PaketController {
         user_phone: "System Test Phone",
         merchant_ok_url: `${config.frontend_url}/odeme/basarili`,
         merchant_fail_url: `${config.frontend_url}/odeme/basarisiz`,
+        merchant_callback_url: `${config.backend_url}/api/paket/paytr-callback`,
         timeout_limit: 30,
         currency: "TL",
-        test_mode: config.paytr.test_mode,
+        test_mode: 1,
       };
 
       // Debug için ödeme verilerini logla
@@ -158,22 +160,56 @@ class PaketController {
   // PayTR callback işlemi
   static async paytrCallback(req, res) {
     try {
-      const isValid = true; // test için
-      // const isValid = PayTR.verifyCallback(req.body);
-      if (!isValid) {
+      // Debug için gelen verileri logla
+      console.log("PayTR Callback Raw Body:", req.rawBody);
+      console.log("PayTR Callback Request Body:", req.body);
+      console.log("PayTR Callback Request Headers:", req.headers);
+
+      // Gelen verilerin varlığını kontrol et
+      if (!req.body || Object.keys(req.body).length === 0) {
+        console.error("PayTR Callback Error: Empty request body");
+        return res
+          .status(400)
+          .json({ success: false, error: "Boş istek gövdesi" });
+      }
+
+      const callback = req.body;
+      const merchant_key = config.paytr.merchant_key;
+      const merchant_salt = config.paytr.merchant_salt;
+
+      // PayTR token oluştur
+      const token =
+        callback.merchant_oid +
+        merchant_salt +
+        callback.status +
+        callback.total_amount;
+      const paytr_token = crypto
+        .createHmac("sha256", merchant_key)
+        .update(token)
+        .digest("base64");
+
+      // Debug için hash bilgilerini logla
+      console.log("PayTR Callback Token String:", token);
+      console.log("PayTR Callback Expected Hash:", paytr_token);
+      console.log("PayTR Callback Received Hash:", callback.hash);
+
+      // Hash kontrolü
+      if (paytr_token !== callback.hash) {
+        console.error("PayTR Callback Error: Invalid hash");
+        console.error("Expected hash:", paytr_token);
+        console.error("Received hash:", callback.hash);
         return res.status(400).json({ success: false, error: "Geçersiz hash" });
       }
 
-      const { merchant_oid, status } = req.body;
-      const satisId = merchant_oid.replace("PAKET", "");
+      const satisId = callback.merchant_oid.replace("PAKET", "");
 
       // Ödeme durumunu güncelle
       await PaketModel.updateOdemeDurumu(
         satisId,
-        status === "success" ? "odendi" : "iptal"
+        callback.status === "success" ? "odendi" : "iptal"
       );
 
-      if (status === "success") {
+      if (callback.status === "success") {
         // Firma aktif paketini güncelle
         const satis = await PaketModel.getPaketSatisById(satisId);
         await PaketModel.updateFirmaAktifPaket(
@@ -208,7 +244,7 @@ class PaketController {
         }
       }
 
-      res.send(status === "success" ? "OK" : "FAILED");
+      res.send("OK");
     } catch (error) {
       console.error("PayTR Callback Error:", error);
       res.status(500).json({ success: false, error: error.message });

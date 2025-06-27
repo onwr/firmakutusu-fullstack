@@ -170,6 +170,45 @@ class User {
       throw error;
     }
   }
+
+  // Kullanıcı ve ilişkili verileri sil
+  static async deleteById(userId) {
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Kullanıcıya bağlı yetkili_kisiler kaydını bul
+      const [userRows] = await connection.query(
+        "SELECT yetkili_kisi_id, firma_id FROM users WHERE id = ?",
+        [userId]
+      );
+      const yetkiliKisiId = userRows[0]?.yetkili_kisi_id;
+      const firmaId = userRows[0]?.firma_id;
+
+      // Yetkili kişiyi sil
+      if (yetkiliKisiId) {
+        await connection.query("DELETE FROM yetkili_kisiler WHERE id = ?", [
+          yetkiliKisiId,
+        ]);
+      }
+      // (İsteğe bağlı) Firmayı sil
+      // if (firmaId) {
+      //   await connection.query("DELETE FROM firmalar WHERE id = ?", [firmaId]);
+      // }
+
+      // Kullanıcıyı sil
+      await connection.query("DELETE FROM users WHERE id = ?", [userId]);
+
+      await connection.commit();
+      return true;
+    } catch (error) {
+      await connection.rollback();
+      console.error("Kullanıcı silme hatası:", error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
 }
 
 module.exports = User;

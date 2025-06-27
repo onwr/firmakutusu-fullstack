@@ -88,7 +88,7 @@ const authController = {
           is_admin: user.admin,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "24h" }
+        { expiresIn: "48h" }
       );
 
       if (process.env.NODE_ENV === "production") {
@@ -253,6 +253,147 @@ const authController = {
       res.status(500).json({
         success: false,
         message: "Şifre sıfırlama işlemi başarısız oldu",
+      });
+    }
+  },
+
+  changePassword: async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const { userId } = req.user;
+
+      // Kullanıcıyı bul
+      const user = await User.me(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Kullanıcı bulunamadı",
+        });
+      }
+
+      // Mevcut şifreyi kontrol et
+      const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçerli şifreniz yanlış.",
+        });
+      }
+
+      // Yeni şifreyi hashle
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(newPassword, salt);
+
+      // Şifreyi güncelle
+      await User.updatePassword(userId, passwordHash);
+
+      res.json({
+        success: true,
+        message: "Şifre başarıyla güncellendi",
+      });
+    } catch (error) {
+      console.error("Şifre güncelleme hatası:", error);
+      res.status(500).json({
+        success: false,
+        message: "Şifre güncellenemedi",
+      });
+    }
+  },
+
+  // Hesap silme için doğrulama kodu gönder
+  sendDeleteCode: async (req, res) => {
+    try {
+      const { userId } = req.user;
+
+      // Kullanıcıyı bul
+      const user = await User.me(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Kullanıcı bulunamadı",
+        });
+      }
+
+      // Yetkili kişi bilgilerini kontrol et
+      if (!user.yetkiliKisi || !user.yetkiliKisi.telefon_no) {
+        return res.status(400).json({
+          success: false,
+          message: "Telefon numaranız sistemde kayıtlı değil",
+        });
+      }
+
+      // Doğrulama kodu oluştur ve gönder
+      const code = SMSService.generateVerificationCode();
+      const message = `FirmaKutusu hesap silme doğrulama kodunuz: ${code}`;
+
+      const smsSent = await SMSService.sendSMS(
+        user.yetkiliKisi.telefon_no,
+        message
+      );
+      if (!smsSent.success) {
+        return res.status(500).json({
+          success: false,
+          message: "SMS gönderilemedi",
+        });
+      }
+
+      // Kodu Redis'e kaydet (hesap silme için özel key)
+      await SMSService.saveVerificationCode(userId, code, "delete");
+
+      res.json({
+        success: true,
+        message: "Hesap silme doğrulama kodu gönderildi",
+      });
+    } catch (error) {
+      console.error("Hesap silme kodu gönderme hatası:", error);
+      res.status(500).json({
+        success: false,
+        message: "Doğrulama kodu gönderilemedi",
+      });
+    }
+  },
+
+  // Hesap silme
+  deleteAccount: async (req, res) => {
+    try {
+      const { verificationCode } = req.body;
+      const { userId } = req.user;
+
+      // Kullanıcıyı bul
+      const user = await User.me(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Kullanıcı bulunamadı",
+        });
+      }
+
+      // Doğrulama kodunu kontrol et
+      const isValid = await SMSService.verifyCode(
+        userId,
+        verificationCode,
+        "delete"
+      );
+      if (!isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçersiz doğrulama kodu",
+        });
+      }
+
+      // Kullanıcıyı ve ilişkili verileri sil
+      await User.deleteById(userId);
+      await SMSService.deleteVerificationCode(userId, "delete");
+
+      res.json({
+        success: true,
+        message: "Hesap ve tüm veriler başarıyla silindi.",
+      });
+    } catch (error) {
+      console.error("Hesap silme hatası:", error);
+      res.status(500).json({
+        success: false,
+        message: "Hesap silinemedi.",
       });
     }
   },

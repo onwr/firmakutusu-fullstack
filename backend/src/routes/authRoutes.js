@@ -38,4 +38,13 @@ router.post(
   authController.resetPassword
 );
 
+// Şifre güncelleme
+router.post("/change-password", authMiddleware, authController.changePassword);
+
+// Hesap silme için doğrulama kodu gönder
+router.post("/send-delete-code", authMiddleware, authController.sendDeleteCode);
+
+// Hesap silme
+router.post("/delete-account", authMiddleware, authController.deleteAccount);
+
 module.exports = router;

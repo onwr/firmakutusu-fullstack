@@ -1,6 +1,69 @@
 const Destek = require("../models/Destek");
 
 const destekController = {
+  // Public destek formu gönderimi (kimlik doğrulama gerektirmez)
+  submitPublicForm: async (req, res) => {
+    try {
+      const { basvuruTuru, adSoyad, email, telefon, mesaj } = req.body;
+
+      // Validasyon
+      if (!basvuruTuru || !adSoyad || !email || !telefon || !mesaj) {
+        return res.status(400).json({
+          success: false,
+          message: "Tüm alanlar zorunludur",
+        });
+      }
+
+      // Email formatı kontrolü
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçerli bir email adresi giriniz",
+        });
+      }
+
+      // Telefon formatı kontrolü (sadece rakamlar)
+      const phoneRegex = /^\d{10}$/;
+      const cleanPhone = telefon.replace(/\D/g, "");
+      if (!phoneRegex.test(cleanPhone)) {
+        return res.status(400).json({
+          success: false,
+          message: "Geçerli bir telefon numarası giriniz (10 haneli)",
+        });
+      }
+
+      // Destek talebi oluştur (user_id null olacak çünkü giriş yapmamış kullanıcı)
+      const ticketNumber = Math.floor(
+        100000 + Math.random() * 900000
+      ).toString();
+      const result = await Destek.createPublicTicket(
+        ticketNumber,
+        basvuruTuru,
+        adSoyad,
+        email,
+        cleanPhone,
+        mesaj
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Destek talebiniz başarıyla gönderildi",
+        data: {
+          ticketNumber,
+          id: result.insertId,
+        },
+      });
+    } catch (error) {
+      console.error("Public destek formu hatası:", error);
+      res.status(500).json({
+        success: false,
+        message: "Destek talebi gönderilirken bir hata oluştu",
+        error: error.message,
+      });
+    }
+  },
+
   // Yeni destek talebi oluştur
   createTicket: async (req, res) => {
     try {
@@ -70,10 +133,15 @@ const destekController = {
   addMessage: async (req, res) => {
     try {
       const { ticketId } = req.params;
-      const { content } = req.body;
+      const { content, image_url } = req.body;
       const is_admin = req.user.is_admin;
 
-      const messageId = await Destek.addMessage(ticketId, content, is_admin);
+      const messageId = await Destek.addMessage(
+        ticketId,
+        content,
+        is_admin,
+        image_url
+      );
 
       res.status(201).json({
         success: true,
@@ -104,6 +172,67 @@ const destekController = {
       res.status(500).json({
         success: false,
         message: "Destek talebi durumu güncellenirken bir hata oluştu",
+        error: error.message,
+      });
+    }
+  },
+
+  // Destek talebine resim ekle
+  addImageMessage: async (req, res) => {
+    try {
+      const { ticketId } = req.params;
+      if (!req.files || !req.files.image) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Resim dosyası gerekli" });
+      }
+      const imageFile = req.files.image;
+
+      // CDN'e yükle
+      const axios = require("axios");
+      const FormData = require("form-data");
+      const formData = new FormData();
+      formData.append("file", imageFile.data, {
+        filename: imageFile.name,
+        contentType: imageFile.mimetype,
+      });
+
+      const cdnRes = await axios.post(
+        "https://cdn.api.heda.tr/index.php",
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+          },
+        }
+      );
+
+      if (!cdnRes.data.success) {
+        return res
+          .status(500)
+          .json({ success: false, message: "Resim CDN yüklenemedi" });
+      }
+      const imageUrl = cdnRes.data.url;
+
+      // Mesaj olarak kaydet
+      const is_admin = req.user.is_admin;
+      const Destek = require("../models/Destek");
+      const messageId = await Destek.addMessage(
+        ticketId,
+        "",
+        is_admin,
+        imageUrl
+      );
+
+      res.status(201).json({
+        success: true,
+        data: { id: messageId, image_url: imageUrl },
+      });
+    } catch (error) {
+      console.error("Resim yükleme hatası:", error);
+      res.status(500).json({
+        success: false,
+        message: "Resim eklenirken bir hata oluştu",
         error: error.message,
       });
     }

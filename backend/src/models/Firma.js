@@ -287,12 +287,21 @@ class Firma {
         fpg.baslangic_tarihi,
         fpg.bitis_tarihi
       FROM firmalar f
-      INNER JOIN firma_paket_gecmisi fpg ON f.id = fpg.firma_id
+      INNER JOIN (
+        SELECT 
+          fpg.firma_id,
+          fpg.paket_id,
+          fpg.baslangic_tarihi,
+          fpg.bitis_tarihi,
+          ROW_NUMBER() OVER (PARTITION BY fpg.firma_id ORDER BY fpg.baslangic_tarihi DESC) as rn
+        FROM firma_paket_gecmisi fpg
+        INNER JOIN paketler p ON fpg.paket_id = p.id
+        WHERE 
+          p.vitrin_gorunurluk = 1 
+          AND fpg.odeme_durumu = 'odendi'
+          AND fpg.bitis_tarihi > NOW()
+      ) fpg ON f.id = fpg.firma_id AND fpg.rn = 1
       INNER JOIN paketler p ON fpg.paket_id = p.id
-      WHERE 
-        p.vitrin_gorunurluk = 1 
-        AND fpg.odeme_durumu = 'odendi'
-        AND fpg.bitis_tarihi > NOW()
       ORDER BY 
         p.fiyat DESC,
         fpg.baslangic_tarihi DESC
